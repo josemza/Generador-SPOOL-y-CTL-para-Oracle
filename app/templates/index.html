@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Generador de spool y ctl</title>
+  <script>
+  (() => {
+    try {
+      const KEY = "ui_theme";
+      const saved = localStorage.getItem(KEY);
+      const sys = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+      document.documentElement.dataset.theme = saved || sys;
+    } catch (e) {}
+  })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <div class="brand">
+        <h1>Generador de Spool (SQLPlus) y CTL (SQLLoader)</h1>
+        <p>
+          Genera archivos de control para automatizar procesos con Oracle SQLPlus y SQLLoader.
+        </p>
+        <div class="inline">
+          <a
+            class="pill"
+            id="quickGuidePill"
+            href="/static/docs/guia-rapida.pdf"
+            target="_blank"
+            rel="noopener"
+            title="Abrir guía rápida (PDF)"
+          >
+            Guía rápida
+          </a>
+          <button
+            class="pill"
+            type="button"
+            id="openSpoolHelpPill"
+            aria-haspopup="dialog"
+            aria-controls="spoolHelpModal"
+            title="Ver anatomía del archivo spool"
+          >
+            Anatomía Spool
+          </button>
+          <button
+            class="pill"
+            type="button"
+            id="openCtlHelpPill"
+            aria-haspopup="dialog"
+            aria-controls="ctlHelpModal"
+            title="Ver anatomía del archivo .ctl (SQL*Loader)"
+          >
+            Anatomía CTL
+          </button>
+        </div>
+      </div>
+      <div class="header-actions">
+      <button class="secondary theme-toggle" type="button" id="theme_toggle" aria-label="Cambiar tema">
+        Modo claro
+      </button>
+
+      <div class="badge" title="Atajo">
+        Tip: navega con <span class="kbd">Tab</span> y envía con <span class="kbd">Enter</span>
+      </div>
+</div>
+
+    </header>
+
+    <!-- Panel 1: Spool -->
+    <section class="panel" data-accordion data-open="true">
+      <button class="accordion-btn" type="button" aria-expanded="true">
+        <div class="accordion-title">
+          <strong>Generar archivo de control para Spool</strong>
+          <span>Exporta a CSV con SQL*Plus. Obtén columnas desde la cabecera del CSV o desde los metadatos de una consulta SQL. Recomendado: valida con Preview antes de generar.</span>
+        </div>
+        <div class="chev" aria-hidden="true">⌄</div>
+      </button>
+      <hr class="sep" />
+      <div class="accordion-body">
+        <form class="form" action="/api/v1/spool" method="post" enctype="multipart/form-data" data-enhanced>
+            <div class="status" data-kind="" aria-live="polite"></div>
+
+            <div class="hint">
+              <strong>Cómo usar:</strong> 1) Elige el modo (CSV o SQL). --> 2) Usa <span class="kbd">Preview</span> para validar columnas. --> 3) Genera y descarga el archivo.
+            </div>
+
+            <div class="mode-toggle" role="group" aria-label="Modo de generación spool">
+                <label class="radio-pill">
+                <input type="radio" name="source_mode" value="csv" checked />
+                <span>CSV de muestra</span>
+                </label>
+                <label class="radio-pill">
+                <input type="radio" name="source_mode" value="sql" />
+                <span>Consulta SQL</span>
+                </label>
+            </div>
+            <div class="hint">
+              Selecciona de dónde se obtendrán las columnas: cabecera del CSV o metadatos de la consulta SQL.
+            </div>
+
+            <div class="grid">
+                <div class="field" data-source="csv">
+                <label for="spool_file">Archivo de muestra (CSV/TXT)</label>
+                <input id="spool_file" type="file" name="file" accept=".csv,.txt" required />
+                <div class="hint js-file-name"></div>
+                <div class="hint">Se utiliza la primera línea como cabecera de columnas (separador coma).</div>
+                </div>
+
+                <div class="field" data-source="csv">
+                <label for="table_name">Nombre de tabla (Oracle)</label>
+                <input id="table_name" type="text" name="table_name" placeholder="SCHEMA.TABLA o TABLA" required />
+                <div class="hint">Se usa tal cual en el FROM. Ej: <span class="kbd">VENTAS.VW_REPORTE</span> o <span class="kbd">SCHEMA.TABLA</span>.</div>
+                </div>
+
+                <div class="field hidden" data-source="sql" style="grid-column: 1 / -1;">
+                <label for="sql_query">Consulta SQL</label>
+                <textarea id="sql_query" name="sql_query" rows="8" placeholder="SELECT ... FROM ..."></textarea>
+                <div class="hint">
+                    Solo se permiten consultas de lectura (<span class="kbd">SELECT</span> o <span class="kbd">WITH ... SELECT</span>). Se ejecutará una muestra (hasta 100 filas) únicamente para leer metadatos de columnas.
+                </div>
+                <div class="hint small">
+                    Restricciones: no se permiten <span class="kbd">INSERT/UPDATE/DELETE/DDL</span> ni múltiples sentencias (;). Evita <span class="kbd">ORDER BY</span> si luego se usará como subquery para el spool.
+                </div>
+                </div>
+
+                <div class="field">
+                <label for="export_path">Ruta de exportación</label>
+                <div class="input-row">
+                  <input id="export_path" type="text" name="export_path" placeholder="C:\Reportes\" required />
+                  <button class="secondary" type="button" data-browse-path>Explorar</button>
+                </div>
+                <div class="hint">Debe ser una ruta absoluta. Se ajusta automáticamente para terminar en <span class="kbd">\</span> o <span class="kbd">/</span>. Por seguridad se bloquean rutas del sistema y shares administrativos (<span class="kbd">C$</span>, <span class="kbd">ADMIN$</span>).</div>
+                </div>
+
+                <div class="field">
+                <label for="report_name">Nombre base del reporte</label>
+                <input id="report_name" type="text" name="report_name" placeholder="reporte_ventas" required />
+                <div class="hint">Nombre final: <span class="kbd">nombrebase_DDMMYYYY.csv</span>. La fecha corresponde a <span class="kbd">SYSDATE - 1</span> (día anterior).</div>
+                </div>
+            </div>
+
+            <div class="btn-row">
+                <button class="primary" type="submit">Generar spool (.sql)</button>
+                <button class="secondary" type="button" data-preview>Preview</button>
+
+                <div class="preview-rows">
+                    <label for="preview_rows" class="small">Filas preview</label>
+                    <select id="preview_rows" name="preview_rows">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    </select>
+                </div>
+
+                <button class="secondary" type="reset">Limpiar</button>
+            </div>
+
+            <div class="footer">
+                Recomendado: usa <span class="kbd">Preview</span> y revisa el .sql antes de ejecutar en producción. La herramienta no almacena tu SQL.
+            </div>
+
+            <div class="preview-wrap hidden" aria-live="polite">
+                <div class="preview-head">
+                    <strong>Preview</strong>
+                    <span class="small">Solo muestra N filas para validar columnas, delimitadores y estructura.</span>
+                </div>
+                <div class="preview-table-wrap">
+                    <table class="preview-table"></table>
+                </div>
+            </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Panel 2: CTL -->
+    <section class="panel" data-accordion data-open="false">
+      <button class="accordion-btn" type="button" aria-expanded="false">
+        <div class="accordion-title">
+          <strong>Generar archivos de control para CTL</strong>
+          <span>Genera <span class="kbd">carga.ctl</span> y un <span class="kbd">CREATE TABLE</span> básico. Entrega un ZIP.</span>
+        </div>
+        <div class="chev" aria-hidden="true">⌄</div>
+      </button>
+      <hr class="sep" />
+      <div class="accordion-body">
+        <form class="form" action="/api/v1/ctl" method="post" enctype="multipart/form-data" data-enhanced>
+          <div class="status" data-kind="" aria-live="polite"></div>
+
+          <div class="grid">
+            <div class="field">
+              <label for="ctl_file">Archivo de datos (CSV o Excel)</label>
+              <input id="ctl_file" type="file" name="archivo" accept=".csv,.xlsx" required />
+              <div class="hint js-file-name"></div>
+              <div class="hint">Se infieren columnas y tipos desde el archivo cargado (en Excel se usa la primera hoja).</div>
+            </div>
+
+            <div class="field">
+              <label for="nombre_tabla">Nombre de tabla (Oracle)</label>
+              <input id="nombre_tabla" type="text" name="nombre_tabla" placeholder="SCHEMA.TABLA o TABLA" required />
+              <div class="hint">Se usa para el CTL y el CREATE TABLE.</div>
+            </div>
+
+            <div class="field">
+              <label for="delimitador">Delimitador</label>
+              <select id="delimitador" name="delimitador" required>
+                <option value="," selected>Coma (,)</option>
+                <option value=";">Punto y coma (;)</option>
+                <option value="|">Pipe (|)</option>
+                <option value="\t">Tab (\t)</option>
+              </select>
+              <div class="hint">Debe coincidir con el delimitador real del archivo de carga.</div>
+            </div>
+
+            <div class="field">
+              <label>Salida</label>
+              <div class="hint">
+                Se descargará un ZIP con <span class="kbd">carga.ctl</span> y <span class="kbd">NOMBRETABLA.sql</span> (CREATE TABLE básico).
+              </div>
+              <div class="hint small">
+                Nota: los tipos Oracle se asignan con reglas simples (NUMBER/FLOAT/DATE/VARCHAR2(255)).
+              </div>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="primary" type="submit">Generar CTL + SQL (ZIP)</button>
+            <button class="secondary" type="reset">Limpiar</button>
+          </div>
+
+          <div class="footer">
+            Sugerencia: ajusta tamaños de VARCHAR2, formato de fechas y reglas de NULL/ENCLOSED BY según tu estándar de carga.
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <p class="small" style="margin-top:14px;">
+      Herramienta desarollada para <span class="kbd">Equipo</span>. </br> Autor: Jose Z.</br>Versión 2.0 - 2026
+    </p>
+  </main>
+
+  <!-- Modal: ayuda anatomía spool -->
+  <div class="modal hidden" id="spoolHelpModal" role="dialog" aria-modal="true" aria-labelledby="spoolHelpTitle">
+    <div class="modal-backdrop" data-modal-close></div>
+
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <strong id="spoolHelpTitle">Anatomía del archivo de control para Spool (SQL*Plus)</strong>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="help-note">
+          <strong>Ejemplo:</strong>
+          <div class="code-block">
+            SET LINESIZE 10000<br />
+            SET ECHO OFF<br />
+            SET TIMING OFF<br />
+            SET PAGESIZE 0<br />
+            SET TERMOUT OFF<br />
+            SET FEEDBACK OFF<br />
+            SET TRIMSPOOL ON<br />
+            <br />
+            WHENEVER SQLERROR EXIT 1;<br />
+            <br />
+            COLUMN tm NEW_VALUE FILE_TIME NOPRINT<br />
+            SELECT to_char(TRUNC(SYSDATE - 1), 'DDMMYYYY') tm FROM DUAL;<br />
+            PROMPT &FILE_TIME<br />
+            <br />
+            SPOOL E:\Ruta\Carpeta_de\reporte_de_ventas_&FILE_TIME.csv<br />
+            SELECT '"Serie","Factura","Fecha","Tipo","Estado","Cliente"' FROM DUAL;<br />
+            SELECT<br />
+            '"'||REPLACE(NVL(TO_CHAR(A."""Serie"""), ''), '"', '""')||'"'||','||<br />
+            '"'||REPLACE(NVL(TO_CHAR(A."""Factura"""), ''), '"', '""')||'"'||','||<br />
+            '"'||REPLACE(NVL(TO_CHAR(A."""Fecha"""), ''), '"', '""')||'"'||','||<br />
+            '"'||REPLACE(NVL(TO_CHAR(A."""Tipo"""), ''), '"', '""')||'"'||','||<br />
+            '"'||REPLACE(NVL(TO_CHAR(A."""Estado"""), ''), '"', '""')||'"'||','||<br />
+            '"'||REPLACE(NVL(TO_CHAR(A."""Cliente"""), ''), '"', '""')||'"'||','||<br />
+            FROM usods01.my_tabla_reporte A;<br />
+            <br />
+            SPOOL OFF;<br />
+            DISCONNECT;<br />
+            EXIT;<br />
+          </div>
+        </div>
+        <div class="help-grid">
+          <div class="help-item">
+            <div class="help-item__title">1) Ajustes SQL*Plus</div>
+            <div class="hint">Configuración para que el CSV salga limpio (sin headings automáticos, sin padding, etc.).</div>
+            <div class="code-block"><code>SET PAGESIZE 0
+  SET FEEDBACK OFF
+  SET HEADING OFF
+  SET LINESIZE 32767
+  SET TRIMSPOOL ON
+  SET TERMOUT OFF</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">2) Control de errores</div>
+            <div class="hint">Si ocurre un error SQL, el script termina con código distinto de 0 (ideal para .bat / orquestación).</div>
+            <div class="code-block"><code>WHENEVER SQLERROR EXIT SQL.SQLCODE;
+  WHENEVER OSERROR  EXIT 1;</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">3) Variable de fecha (día anterior)</div>
+            <div class="hint">Se calcula una marca de fecha para el nombre del archivo de salida (por defecto: <span class="kbd">SYSDATE - 1</span>).</div>
+            <div class="code-block"><code>COLUMN FILE_TIME NEW_VALUE FILE_TIME;
+  SELECT TO_CHAR(SYSDATE - 1,'DDMMYYYY') AS FILE_TIME FROM DUAL;</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">4) Inicio del SPOOL</div>
+            <div class="hint">Redirige el resultado del SQL a un archivo CSV en la ruta elegida.</div>
+            <div class="code-block"><code>SPOOL &amp;EXPORT_PATH&amp;REPORT_NAME_&amp;FILE_TIME..csv</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">5) Cabecera CSV</div>
+            <div class="hint">Se imprime una primera línea con los nombres de columnas (una sola fila).</div>
+            <div class="code-block"><code>SELECT 'COL1,COL2,COL3' FROM DUAL;</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">6) Filas de datos</div>
+            <div class="hint">Se construye el CSV asegurando escape de comillas dobles dentro de texto.</div>
+            <div class="code-block"><code>SELECT
+    REPLACE(NVL(TO_CHAR(A.col1), ''), '"', '""') || ',' ||
+    REPLACE(NVL(TO_CHAR(A.col2), ''), '"', '""')
+  FROM TU_TABLA A;</code></div>
+          </div>
+
+          <div class="help-item" style="grid-column: 1 / -1;">
+            <div class="help-item__title">7) Cierre y salida</div>
+            <div class="hint">Cierra el archivo y termina correctamente.</div>
+            <div class="code-block"><code>SPOOL OFF
+  EXIT;</code></div>
+          </div>
+        </div>
+
+        <div class="help-note">
+          <strong>Nota:</strong> El ejemplo es ilustrativo. Tu generador ajusta columnas, alias y reglas de formato según el input (CSV o metadatos SQL).
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="secondary" type="button" data-modal-cancel>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: ayuda anatomía CTL -->
+  <div class="modal hidden" id="ctlHelpModal" role="dialog" aria-modal="true" aria-labelledby="ctlHelpTitle">
+    <div class="modal-backdrop" data-modal-close></div>
+
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <strong id="ctlHelpTitle">Anatomía del archivo de control CTL (SQL*Loader)</strong>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="help-note">
+          <strong>Ejemplo:</strong>
+          <div class="code-block">OPTIONS (SKIP = 1)<br />
+LOAD DATA<br />
+INFILE 'reporte.csv'<br />
+REPLACE USING TRUNCATE<br />
+INTO TABLE usods01.tabla_ctl<br />
+FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'<br />
+TRAILING NULLCOLS<br />
+(<br />
+Serie,<br />
+Factura,<br />
+Fecha,<br />
+Tipo,<br />
+Estado,<br />
+Cliente,<br />
+)</div>
+        </div>
+
+        <div class="help-grid">
+          <div class="help-item">
+            <div class="help-item__title">1) Opciones (opcional)</div>
+            <div class="hint">Ajustes globales de carga (errores permitidos, filas por commit, etc.).</div>
+            <div class="code-block"><code>OPTIONS (ERRORS=0, ROWS=5000, DIRECT=FALSE)</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">2) LOAD DATA</div>
+            <div class="hint">Indica que el archivo define una carga SQL*Loader.</div>
+            <div class="code-block"><code>LOAD DATA</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">3) INFILE / BADFILE / DISCARDFILE</div>
+            <div class="hint">Define el archivo de entrada y archivos auxiliares (rechazados/descartados). El LOG normalmente lo pasas por parámetro en la ejecución.</div>
+            <div class="code-block"><code>INFILE 'data.csv'
+  BADFILE 'carga.bad'
+  DISCARDFILE 'carga.dsc'</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">4) INTO TABLE + modo</div>
+            <div class="hint">Tabla destino y estrategia: INSERT / APPEND / REPLACE / TRUNCATE.</div>
+            <div class="code-block"><code>INTO TABLE SCHEMA.TU_TABLA
+  APPEND</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">5) FIELDS (delimitador y comillas)</div>
+            <div class="hint">Define cómo se parsean columnas (coma/; /pipe), si hay comillas, y charset.</div>
+            <div class="code-block"><code>FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+  TRAILING NULLCOLS</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">6) Mapeo de columnas</div>
+            <div class="hint">Lista columnas y tipos “externos”/formatos. Aquí vive la mayor parte del CTL.</div>
+            <div class="code-block"><code>(
+    COL1          CHAR(200),
+    COL2          INTEGER EXTERNAL,
+    COL3          DECIMAL EXTERNAL,
+    FECHA_CARGA   DATE "YYYY-MM-DD"
+  )</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">7) Nulls y reglas</div>
+            <div class="hint">Controla nulos y transformaciones simples en carga (NULLIF, constantes, filler).</div>
+            <div class="code-block"><code>COLX   CHAR(50)  NULLIF COLX=BLANKS,
+  CONST1 CONSTANT 'PERU',
+  FILLER1 FILLER CHAR(10)</code></div>
+          </div>
+
+          <div class="help-item">
+            <div class="help-item__title">8) Ejecución típica</div>
+            <div class="hint">El CTL se ejecuta con <span class="kbd">sqlldr</span>; recomienda especificar log/bad/discard por línea de comando.</div>
+            <div class="code-block"><code>sqlldr user/pass@TNS control=carga.ctl data=data.csv \
+  log=carga.log bad=carga.bad discard=carga.dsc</code></div>
+          </div>
+        </div>
+
+        <div class="help-note">
+          <strong>Nota:</strong> Tu generador ajusta el delimitador, el “encerrado” en comillas y los tipos inferidos (incluyendo fechas) en base al CSV/Excel cargado.
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="secondary" type="button" data-modal-cancel>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: selector de carpeta -->
+  <div class="modal hidden" id="pathModal" role="dialog" aria-modal="true" aria-labelledby="pathModalTitle">
+    <div class="modal-backdrop" data-modal-close></div>
+
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <strong id="pathModalTitle">Elegir carpeta de exportación</strong>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-row">
+          <label class="small" for="path_root">Raíz</label>
+          <select id="path_root"></select>
+          <button class="secondary" type="button" data-path-up>Arriba</button>
+        </div>
+
+        <div class="modal-row">
+          <label class="small" for="path_current">Ruta</label>
+          <input id="path_current" type="text" placeholder="C:\... o \\servidor\share\..." />
+          <button class="secondary" type="button" data-path-go>Ir</button>
+        </div>
+
+        <div class="path-list" id="path_list" role="listbox" tabindex="0"></div>
+
+        <div class="modal-status small" data-path-status></div>
+        <div class="hint small">Tip: doble clic para ingresar a una carpeta. Si ves “Restringido”, no tienes permisos. Luego pulsa “Usar esta carpeta”.</div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="secondary" type="button" data-modal-cancel>Cancelar</button>
+        <button class="primary" type="button" data-path-select>Usar esta carpeta</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
