@@ -93,15 +93,14 @@ def generar_spool(export_path, report_name, from_source, columns):
     
     pieces = []
     for col in columns:
-        qid = _quote_oracle_identifier(col)
-        val = f"REPLACE(NVL(TO_CHAR(A.{qid}), ''), '\"', '\"\"')"
+        val = f"REPLACE(NVL(TO_CHAR(A.{col}), ''), '\"', '\"\"')"
         pieces.append(f"'\"'||{val}||'\"'")
 
     # Une columnas con coma
     select_clause = "||','||\n".join(pieces)
 
     # Header con columnas (sin comillas)
-    header = ",".join([str(c) for c in columns])
+    header = ",".join([_quote_oracle_identifier(str(c)) for c in columns])
 
     report_name = limpiar_texto_completo(report_name).lower()
 
@@ -127,7 +126,7 @@ COLUMN tm NEW_VALUE FILE_TIME NOPRINT
 SELECT to_char(TRUNC(SYSDATE - 1), 'DDMMYYYY') tm FROM DUAL;
 PROMPT &FILE_TIME
 
-SPOOL "{export_path}{report_name}_&FILE_TIME.csv"
+SPOOL "{export_path}{report_name}_&FILE_TIME..csv"
 SELECT '{header}' FROM DUAL;
 SELECT
 {select_clause}
