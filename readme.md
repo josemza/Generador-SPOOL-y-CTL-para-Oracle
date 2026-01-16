@@ -1,12 +1,15 @@
 # Generador de Spool (SQL*Plus) y CTL (SQL*Loader)
 
-Aplicación web local para generar artefactos Oracle a partir de:
+Aplicación web local para generar artefactos Oracle para automatización de carga y descarga de datos a partir de:
 - Un **archivo de muestra** (CSV/TXT/Excel), o
 - Una **consulta SQL** (solo lectura)
 
 Incluye un frontend en **HTML/CSS/JS (vanilla)** servido por FastAPI.
 
 ---
+
+## Vista principal
+![Vista principal](https://raw.githubusercontent.com/josemza/Generador-SPOOL-y-CTL-para-Oracle/refs/heads/main/vista_principal.jpeg)
 
 ## Qué resuelve
 
